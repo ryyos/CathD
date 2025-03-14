@@ -24,8 +24,8 @@ class CathD:
         ...
     
     @classmethod
-    def download(cls, url: str, path: str, retry: int = 10, send_s3: bool = False, save: bool = False, s3fs_connection: any = None, bucket: str = None, **kwargs) -> bytes:
-        Help.create_dir(paths='/'.join(path.split('/')[:-1]))
+    def download(cls, url: str, path: str = None, retry: int = 10, send_s3: bool = False, save: bool = False, s3fs_connection: any = None, bucket: str = None, **kwargs) -> bytes:
+        if path: Help.create_dir(paths='/'.join(path.split('/')[:-1]))
         headers = kwargs.get("header", {})
         def _save(body: any, destination: str) -> str:
             try:
@@ -68,8 +68,11 @@ class CathD:
                 return ""
             
         start = perf_counter()
-        filename: str = Help.name_file(path)
-        logger.info(f"PROCESS DOWNLOAD [ {Help.name_file(path)} ] :: START [ {Help.now()} ]")
+        if path:
+            filename: str = Help.name_file(path)
+            logger.info(f"PROCESS DOWNLOAD [ {Help.name_file(path)} ] :: START [ {Help.now()} ]")
+        else:
+            logger.info(f"PROCESS DOWNLOAD :: START [ {Help.now()} ]")
         chunks = list()
         downloaded = 0
         
@@ -77,7 +80,7 @@ class CathD:
             try:
                 header = {'Range': f'bytes={downloaded}-'}
                 headers.update(header)
-                with requests.get(url, headers=headers, stream=True, timeout=600) as r:
+                with requests.get(url, headers=headers, stream=True, timeout=600, **kwargs.get("requests", {})) as r:
                     total_size = downloaded + int(r.headers.get('Content-Length', 0))
                     r.raise_for_status()
                     with tqdm(total=total_size, unit='B', unit_scale=True, desc='DOWNLOAD', ncols=100, initial=downloaded) as pbar:
@@ -90,11 +93,13 @@ class CathD:
                     if downloaded < total_size:
                         raise Exception('Download has not yet been completed')
                     if save:
+                        if not path: raise Exception('please insert path!')
                         _save(chunks, path)
                     if send_s3:
+                        if not path: raise Exception('please insert path!')
                         _upload(chunks, path)
                         
-                    break
+                    return b''.join(chunks)
             except Exception as err:
                 if index+1 == retry: raise Exception(err)
                 logger.error(f'MESSAGE [ {err} ] TRY AGAIN [ {index} ]')
